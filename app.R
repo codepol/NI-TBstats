@@ -8,14 +8,13 @@ library(lubridate)
 library(plotly)
 
 # Read data from a CSV file and perform data preprocessing
-long_data <- read.csv("data/TB_Animal_SummaryAll.csv") %>%
-  mutate(Date = make_date(Year, Month, 1))
+long_data <- read_csv("data/TB_Animal_SummaryLong20250820.csv")
   
 
 # Shiny UI ----
 # UI
 ui <- fluidPage(
-  titlePanel("Northern Ireland Area Time Series Viewer"),
+  titlePanel("NI TB Cases Dashboard"),
   
   sidebarLayout(
     sidebarPanel(
@@ -26,9 +25,9 @@ ui <- fluidPage(
     
     mainPanel(
       tabsetPanel(
-        tabPanel("Time Series",
+        tabPanel("TB Reactor Animals",
                  plotlyOutput("tsPlot")),
-        tabPanel("YoY % Change",
+        tabPanel("TB Reactor Animals YoY % Change",
                  plotlyOutput("pctChangePlot"),
                  br(),
                  h4("Raw Counts & % Change Table"),
@@ -50,7 +49,7 @@ server <- function(input, output) {
     p <- ggplot(filtered_data(), aes(x = Date, y = Value, color = Area)) +
       geom_line(size = 1) +
       geom_point() +
-      labs(title = "Time Series by Area", x = "Date", y = "Value") +
+      labs(title = "TB Reactor Animals Time Series by Area", x = "Date", y = "Value") +
       theme_minimal()
     
     ggplotly(p)
@@ -88,7 +87,7 @@ server <- function(input, output) {
       coord_flip() +
       scale_fill_manual(values = c("TRUE" = "firebrick", "FALSE" = "forestgreen")) +
       labs(
-        title = paste("YoY % Change —", format(latest_date, "%B %Y")),
+        title = paste("TB Reactor Animals YoY % Change —", format(latest_date, "%B %Y")),
         x = "Area", y = "% Change"
       ) +
       theme_minimal() +
@@ -119,7 +118,7 @@ server <- function(input, output) {
       select(Area, `Previous Year`, `Latest`, `% Change`) %>%
       arrange(desc(`% Change`))
     
-    DT::datatable(yoy_data, options = list(pageLength = 10))
+    DT::datatable(yoy_data, options = list(pageLength = 15))
   })
 
 }
