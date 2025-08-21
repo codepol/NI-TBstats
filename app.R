@@ -6,7 +6,6 @@ library(tidyverse)
 library(gitlink)
 library(lubridate)
 library(plotly)
-#library(shinyjs)
 library(DT)
 
 # Read data from CSV files
@@ -19,84 +18,64 @@ AnnualAP <- read.csv("data/TB_annualAP_Pivot20250820.csv")
 TBCultPos <- read.csv("data/TB_percTBCult_Pivot20250820.csv")
 
 # Get latest data refresh date and time #TODO
-refreshDatetime <- format(Sys.time(), "%Y-%m-%d %H:%M")
+refreshDatetime <- format(file.info("data/TB_percTBCult_Pivot20250820.csv")$mtime, "%Y-%m-%d %H:%M")
 
 # Shiny UI ----
 # UI
 ui <- fluidPage(
-  #shinyjs::useShinyjs(),  # Include shinyjs
   titlePanel("NI TB Cases Dashboard"),
-  
-  #actionButton("toggleSidebar", "Toggle Sidebar"),
   br(),
   
-  fluidRow(
-    # Sidebar column
-    column(
-      width = 3, 
-      id = "sidebarCol",
-      wellPanel(
-        selectInput("areaInput", "Select Area(s):", 
-                    choices = unique(TBAni$Area), 
-                    selected = "Armagh", multiple = TRUE)
-      )
-    ),
-    
-    # Main column
-    column(
-      width = 9, 
-      id = "mainCol",
-      h4(paste0("Date Last Data Refresh: ", refreshDatetime)),
-      tabsetPanel(
-        tabPanel("TB Reactor Animals",
-                 plotlyOutput("tsPlot"),
-                 br(),
-                 plotlyOutput("pctChangePlot"),
-                 br(),
-                 h4("Count of TB Reactor Animals over the past 3 calendar years"),
-                 DTOutput("TBHPivot")
-        ),
-        tabPanel("TB Reactor Herds",
-                 plotlyOutput("tsPlotHerds"),
-                 br(),
-                 plotlyOutput("pctChangePlotHerds"),
-                 br(),
-                 h4("Count of TB Reactor Herds over the past 3 calendar years"),
-                 DTOutput("TBAPivot")
-        ),
-        tabPanel("Annual Herd Prevalence",
-                 h4("Annual Herd Prevalence 2005 - present"),
-                 DTOutput("AnnualHP")
-        ),
-        tabPanel("Annual Animal Prevalence",
-                 h4("Annual Animal Prevalence 2005 - present"),
-                 DTOutput("AnnualAP")
-        ),
-        tabPanel("% Animals Infected Detected Post-Mortem",
-                 h4("Annual Percentage of animals confirmed as infected and detected at post-mortem and not by skin test 2005 - present"),
-                 DTOutput("TBCultPos")
-        )
-      )
-    )
-  ),
+  h4(paste0("Date Last Data Refresh: ", refreshDatetime)),
   
-  # Custom CSS to handle hiding/expanding
-  #tags$style(HTML("
-  #  .hiddenSidebar { display: none; }
-  #  .fullWidth { width: 100% !important; flex: 0 0 100%; max-width: 100%; }
-  #"))
+  tabsetPanel(
+    tabPanel("TB Reactor Animals",
+             # Area filter just for this tab
+             selectInput("areaInputAnimals", "Select Area(s):", 
+                         choices = unique(TBAni$Area), 
+                         selected = "Armagh", multiple = TRUE),
+             br(),
+             plotlyOutput("tsPlot"),
+             br(),
+             plotlyOutput("pctChangePlot"),
+             br(),
+             h4("Count of TB Reactor Animals over the past 3 calendar years"),
+             DTOutput("TBHPivot")
+    ),
+    tabPanel("TB Reactor Herds",
+             # Area filter just for this tab
+             selectInput("areaInputHerds", "Select Area(s):", 
+                         choices = unique(TBHerds$Area), 
+                         selected = "Armagh", multiple = TRUE),
+             br(),
+             plotlyOutput("tsPlotHerds"),
+             br(),
+             plotlyOutput("pctChangePlotHerds"),
+             br(),
+             h4("Count of TB Reactor Herds over the past 3 calendar years"),
+             DTOutput("TBAPivot")
+    ),
+    tabPanel("Annual Herd Prevalence",
+             h4("Annual Herd Prevalence 2005 - present"),
+             DTOutput("AnnualHP")
+    ),
+    tabPanel("Annual Animal Prevalence",
+             h4("Annual Animal Prevalence 2005 - present"),
+             DTOutput("AnnualAP")
+    ),
+    tabPanel("% Animals Infected Detected Post-Mortem",
+             h4("Annual Percentage of animals confirmed as infected and detected at post-mortem and not by skin test 2005 - present"),
+             DTOutput("TBCultPos")
+    )
+  )
 )
 
 # Server
 server <- function(input, output, session) {
-  
-  #observeEvent(input$toggleSidebar, {
-  #  shinyjs::toggleClass("sidebarCol", "hiddenSidebar")
-  #  shinyjs::toggleClass("mainCol", "fullWidth")
-  #})
-  
+
+  # For animals
   filtered_data <- reactive({
-    TBAni %>% filter(Area %in% input$areaInput)
+    TBAni %>% filter(Area %in% input$areaInputAnimals)
   })
   
   # TB Reactor Animals Time Series Plot
@@ -110,8 +89,9 @@ server <- function(input, output, session) {
     ggplotly(p)
   })
   
+  # For herds
   filtered_data2 <- reactive({
-    TBHerds %>% filter(Area %in% input$areaInput)
+    TBHerds %>% filter(Area %in% input$areaInputHerds)
   })
   
   # TB Reactor Hers Time Series Plot
