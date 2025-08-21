@@ -6,26 +6,47 @@ library(tidyverse)
 library(gitlink)
 library(lubridate)
 library(plotly)
+library(shinyjs)
+library(DT)
 
 # Read data from CSV files
 TBAni <- read_csv("data/TB_Animal_SummaryLong20250820.csv")
 TBAniPIV <- read_csv("data/TB_Animal_SummaryPivot20250820.csv")
 TBHerds <- read_csv("data/TB_ReactorHerds_SummaryAll20250820.csv")
 TBHerdsPIV <- read_csv("data/TB_ReactorHerds_SummaryPivot20250820.csv")
+AnnualHP <- read.csv("data/TB_annualHP_Pivot20250820.csv")
+AnnualAP <- read.csv("data/TB_annualAP_Pivot20250820.csv")
+TBCultPos <- read.csv("data/TB_percTBCult_Pivot20250820.csv")
+
+# Get latest data refresh date and time #TODO
+refreshDatetime <- format(Sys.time(), "%Y-%m-%d %H:%M")
 
 # Shiny UI ----
 # UI
 ui <- fluidPage(
+  useShinyjs(),
   titlePanel("NI TB Cases Dashboard"),
   
-  sidebarLayout(
-    sidebarPanel(
-      selectInput("areaInput", "Select Area(s):", 
-                  choices = unique(TBAni$Area), 
-                  selected = "Armagh", multiple = TRUE)
+  actionButton("toggleSidebar", "Toggle Sidebar"),
+  br(),
+  
+  fluidRow(
+    # Sidebar column
+    column(
+      width = 3, 
+      id = "sidebarCol",
+      wellPanel(
+        selectInput("areaInput", "Select Area(s):", 
+                    choices = unique(TBAni$Area), 
+                    selected = "Armagh", multiple = TRUE)
+      )
     ),
     
-    mainPanel(
+    # Main column
+    column(
+      width = 9, 
+      id = "mainCol",
+      h4(paste0("Date Last Data Refresh: ", refreshDatetime)),
       tabsetPanel(
         tabPanel("TB Reactor Animals",
                  plotlyOutput("tsPlot"),
@@ -33,23 +54,46 @@ ui <- fluidPage(
                  plotlyOutput("pctChangePlot"),
                  br(),
                  h4("Count of TB Reactor Animals over the past 3 calendar years"),
-                 DT::dataTableOutput("TBHPivot")
-                 ),
+                 DTOutput("TBHPivot")
+        ),
         tabPanel("TB Reactor Herds",
                  plotlyOutput("tsPlotHerds"),
                  br(),
                  plotlyOutput("pctChangePlotHerds"),
                  br(),
                  h4("Count of TB Reactor Herds over the past 3 calendar years"),
-                 DT::dataTableOutput("TBAPivot")
-                 )
+                 DTOutput("TBAPivot")
+        ),
+        tabPanel("Annual Herd Prevalence",
+                 h4("Annual Herd Prevalence 2005 - present"),
+                 DTOutput("AnnualHP")
+        ),
+        tabPanel("Annual Animal Prevalence",
+                 h4("Annual Animal Prevalence 2005 - present"),
+                 DTOutput("AnnualAP")
+        ),
+        tabPanel("% Animals Infected Detected Post-Mortem",
+                 h4("Annual Percentage of animals confirmed as infected and detected at post-mortem and not by skin test 2005 - present"),
+                 DTOutput("TBCultPos")
+        )
       )
     )
-  )
+  ),
+  
+  # Custom CSS to handle hiding/expanding
+  tags$style(HTML("
+    .hiddenSidebar { display: none; }
+    .fullWidth { width: 100% !important; flex: 0 0 100%; max-width: 100%; }
+  "))
 )
 
 # Server
-server <- function(input, output) {
+server <- function(input, output, session) {
+  
+  observeEvent(input$toggleSidebar, {
+    toggleClass("sidebarCol", "hiddenSidebar")
+    toggleClass("mainCol", "fullWidth")
+  })
   
   filtered_data <- reactive({
     TBAni %>% filter(Area %in% input$areaInput)
@@ -379,6 +423,51 @@ server <- function(input, output) {
           c("#f0f0f0", "#f0f0f0", "#f0f0f0")
         )
       )
+  })
+  
+  # === Annual Herd Prevalence ===
+  output$AnnualHP <- DT::renderDataTable({ 
+    piv_data <- AnnualHP
+    
+    # create 19 breaks and 20 rgb color values ranging from white to red
+    brks <- quantile((piv_data %>% select(-Statistic)), probs = seq(.05, .95, .05), na.rm = TRUE)
+    clrs <- round(seq(255, 40, length.out = length(brks) + 1), 0) %>%
+      {paste0("rgb(255,", ., ",", ., ")")}
+    
+    DT::datatable(piv_data, options = list(pageLength = 25, dom='t', ordering=FALSE), rownames=FALSE) %>%
+      
+      formatStyle(names(piv_data), backgroundColor = styleInterval(brks, clrs))
+    
+    })
+  
+  # === Annual Animal Prevalence ===
+  output$AnnualAP <- DT::renderDataTable({ 
+    piv_data <- AnnualAP
+    
+    # create 19 breaks and 20 rgb color values ranging from white to red
+    brks <- quantile((piv_data %>% select(-Statistic)), probs = seq(.05, .95, .05), na.rm = TRUE)
+    clrs <- round(seq(255, 40, length.out = length(brks) + 1), 0) %>%
+      {paste0("rgb(255,", ., ",", ., ")")}
+    
+    DT::datatable(piv_data, options = list(pageLength = 25, dom='t', ordering=FALSE), rownames=FALSE) %>%
+      
+      formatStyle(names(piv_data), backgroundColor = styleInterval(brks, clrs))
+    
+  })
+  
+  # === Percentage of animals confirmed as infected and detected at post-mortem and not by skin test ===
+  output$TBCultPos <- DT::renderDataTable({ 
+    piv_data <- TBCultPos
+    
+    # create 19 breaks and 20 rgb color values ranging from white to red
+    brks <- quantile((piv_data %>% select(-Statistic)), probs = seq(.05, .95, .05), na.rm = TRUE)
+    clrs <- round(seq(255, 40, length.out = length(brks) + 1), 0) %>%
+      {paste0("rgb(255,", ., ",", ., ")")}
+    
+    DT::datatable(piv_data, options = list(pageLength = 25, dom='t', ordering=FALSE), rownames=FALSE) %>%
+      
+      formatStyle(names(piv_data), backgroundColor = styleInterval(brks, clrs))
+    
   })
 
 }
