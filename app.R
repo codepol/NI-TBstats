@@ -6,7 +6,7 @@ library(tidyverse)
 library(gitlink)
 library(lubridate)
 library(plotly)
-library(shinyjs)
+#library(shinyjs)
 library(DT)
 
 # Read data from CSV files
@@ -24,7 +24,7 @@ refreshDatetime <- format(Sys.time(), "%Y-%m-%d %H:%M")
 # Shiny UI ----
 # UI
 ui <- fluidPage(
-  useShinyjs(),
+  shinyjs::useShinyjs(),  # Include shinyjs
   titlePanel("NI TB Cases Dashboard"),
   
   actionButton("toggleSidebar", "Toggle Sidebar"),
@@ -91,8 +91,8 @@ ui <- fluidPage(
 server <- function(input, output, session) {
   
   observeEvent(input$toggleSidebar, {
-    toggleClass("sidebarCol", "hiddenSidebar")
-    toggleClass("mainCol", "fullWidth")
+    shinyjs::toggleClass("sidebarCol", "hiddenSidebar")
+    shinyjs::toggleClass("mainCol", "fullWidth")
   })
   
   filtered_data <- reactive({
