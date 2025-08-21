@@ -24,10 +24,10 @@ refreshDatetime <- format(Sys.time(), "%Y-%m-%d %H:%M")
 # Shiny UI ----
 # UI
 ui <- fluidPage(
-  shinyjs::useShinyjs(),  # Include shinyjs
+  #shinyjs::useShinyjs(),  # Include shinyjs
   titlePanel("NI TB Cases Dashboard"),
   
-  actionButton("toggleSidebar", "Toggle Sidebar"),
+  #actionButton("toggleSidebar", "Toggle Sidebar"),
   br(),
   
   fluidRow(
@@ -81,19 +81,19 @@ ui <- fluidPage(
   ),
   
   # Custom CSS to handle hiding/expanding
-  tags$style(HTML("
-    .hiddenSidebar { display: none; }
-    .fullWidth { width: 100% !important; flex: 0 0 100%; max-width: 100%; }
-  "))
+  #tags$style(HTML("
+  #  .hiddenSidebar { display: none; }
+  #  .fullWidth { width: 100% !important; flex: 0 0 100%; max-width: 100%; }
+  #"))
 )
 
 # Server
 server <- function(input, output, session) {
   
-  observeEvent(input$toggleSidebar, {
-    shinyjs::toggleClass("sidebarCol", "hiddenSidebar")
-    shinyjs::toggleClass("mainCol", "fullWidth")
-  })
+  #observeEvent(input$toggleSidebar, {
+  #  shinyjs::toggleClass("sidebarCol", "hiddenSidebar")
+  #  shinyjs::toggleClass("mainCol", "fullWidth")
+  #})
   
   filtered_data <- reactive({
     TBAni %>% filter(Area %in% input$areaInput)
