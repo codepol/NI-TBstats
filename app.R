@@ -9,16 +9,16 @@ library(plotly)
 library(DT)
 
 # Read data from CSV files
-TBAni <- read_csv("data/TB_Animal_SummaryLong20250820.csv")
-TBAniPIV <- read_csv("data/TB_Animal_SummaryPivot20250820.csv")
-TBHerds <- read_csv("data/TB_ReactorHerds_SummaryAll20250820.csv")
-TBHerdsPIV <- read_csv("data/TB_ReactorHerds_SummaryPivot20250820.csv")
-AnnualHP <- read.csv("data/TB_annualHP_Pivot20250820.csv")
-AnnualAP <- read.csv("data/TB_annualAP_Pivot20250820.csv")
-TBCultPos <- read.csv("data/TB_percTBCult_Pivot20250820.csv")
+TBAni <- read_csv("data/TB_Animal_SummaryLong.csv")
+TBAniPIV <- read_csv("data/TB_Animal_SummaryPivot.csv")
+TBHerds <- read_csv("data/TB_ReactorHerds_SummaryAll.csv")
+TBHerdsPIV <- read_csv("data/TB_ReactorHerds_SummaryPivot.csv")
+AnnualHP <- read.csv("data/TB_annualHP_Pivot.csv")
+AnnualAP <- read.csv("data/TB_annualAP_Pivot.csv")
+TBCultPos <- read.csv("data/TB_percTBCult_Pivot.csv")
 
 # Get latest data refresh date and time #TODO
-refreshDatetime <- format(file.info("data/TB_percTBCult_Pivot20250820.csv")$mtime, "%Y-%m-%d %H:%M")
+refreshDatetime <- format(file.info("data/TB_percTBCult_Pivot.csv")$mtime, "%Y-%m-%d %H:%M")
 
 # Shiny UI ----
 # UI
@@ -40,7 +40,7 @@ ui <- fluidPage(
              plotlyOutput("pctChangePlot"),
              br(),
              h4("Count of TB Reactor Animals over the past 3 calendar years"),
-             DTOutput("TBHPivot")
+             DTOutput("TBAPivot")
     ),
     tabPanel("TB Reactor Herds",
              # Area filter just for this tab
@@ -53,7 +53,7 @@ ui <- fluidPage(
              plotlyOutput("pctChangePlotHerds"),
              br(),
              h4("Count of TB Reactor Herds over the past 3 calendar years"),
-             DTOutput("TBAPivot")
+             DTOutput("TBHPivot")
     ),
     tabPanel("Annual Herd Prevalence",
              h4("Annual Herd Prevalence 2005 - present"),
@@ -72,7 +72,7 @@ ui <- fluidPage(
 
 # Server
 server <- function(input, output, session) {
-
+  
   # For animals
   filtered_data <- reactive({
     TBAni %>% filter(Area %in% input$areaInputAnimals)
@@ -94,7 +94,7 @@ server <- function(input, output, session) {
     TBHerds %>% filter(Area %in% input$areaInputHerds)
   })
   
-  # TB Reactor Hers Time Series Plot
+  # TB Reactor Herds Time Series Plot
   output$tsPlotHerds <- renderPlotly({
     p <- ggplot(filtered_data2(), aes(x = Date, y = Value, color = Area)) +
       geom_line(linewidth = 1) +
@@ -105,21 +105,27 @@ server <- function(input, output, session) {
     ggplotly(p)
   })
   
-  # === TB Reactor Animals % Change Chart ===
+  # === TB Reactor Animals 12-Month Cumulative Change Chart ===
   output$pctChangePlot <- renderPlotly({
     latest_date <- max(TBAni$Date)
     prev_year_date <- latest_date %m-% years(1)
     
+    # Define 12-month windows
+    latest_start <- latest_date %m-% months(11)
+    prev_year_start <- prev_year_date %m-% months(11)
+    
     yoy_data <- TBAni %>%
-      filter(Date %in% c(latest_date, prev_year_date)) %>%
       mutate(period = case_when(
-        Date == latest_date ~ "latest",
-        Date == prev_year_date ~ "previous"
+        Date >= latest_start & Date <= latest_date ~ "latest",
+        Date >= prev_year_start & Date <= prev_year_date ~ "previous"
       )) %>%
-      select(Area, period, Value) %>%
-      pivot_wider(names_from = period, values_from = Value) %>%
+      filter(!is.na(period)) %>%
+      group_by(Area, period) %>%
+      summarise(total = sum(Value, na.rm = TRUE), .groups = "drop") %>%
+      pivot_wider(names_from = period, values_from = total) %>%
       filter(!is.na(latest), !is.na(previous)) %>%
       mutate(
+        abs_change = latest - previous,
         pct_change = 100 * (latest - previous) / previous
       )
     
@@ -128,40 +134,53 @@ server <- function(input, output, session) {
       return(NULL)
     }
     
-    p <- ggplot(yoy_data, aes(x = reorder(Area, pct_change), y = pct_change, fill = pct_change > 0,
-                              text = paste0("Area: ", Area,
-                                            "<br>Latest: ", latest,
-                                            "<br>Previous: ", previous,
-                                            "<br>% Change: ", round(pct_change, 1), "%"))) +
+    p <- ggplot(yoy_data, aes(
+      x = reorder(Area, pct_change), y = abs_change, fill = abs_change > 0,
+      text = paste0(
+        "Area: ", Area,
+        "<br>Latest 12mo: ", latest,
+        "<br>Previous 12mo: ", previous,
+        "<br>Change: ", abs_change,
+        "<br>% Change: ", round(pct_change, 1), "%"
+      )
+    )) +
       geom_col() +
       coord_flip() +
       scale_fill_manual(values = c("TRUE" = "firebrick", "FALSE" = "forestgreen")) +
       labs(
-        title = paste("TB Reactor Animals YoY % Change —", format(latest_date, "%B %Y"), " vs ", 
-                      format(prev_year_date, "%B %Y")),
-        x = "Area", y = "% Change"
+        title = paste("TB Reactor Animals 12-Month Cumulative Change —",
+                      format(latest_start, "%b %Y"), "–", format(latest_date, "%b %Y"),
+                      " vs ",
+                      format(prev_year_start, "%b %Y"), "–", format(prev_year_date, "%b %Y")),
+        x = "Area", y = "Change in Counts"
       ) +
       theme_minimal() +
       theme(legend.position = "none")
     
     ggplotly(p, tooltip = "text")
   })
-
-  # === TB Reactor Herds % Change Chart ===
+  
+  # === TB Reactor Animals 12-Month Cumulative Change Chart ===
   output$pctChangePlotHerds <- renderPlotly({
     latest_date <- max(TBHerds$Date)
     prev_year_date <- latest_date %m-% years(1)
     
+    # Define 12-month windows
+    latest_start <- latest_date %m-% months(11)
+    prev_year_start <- prev_year_date %m-% months(11)
+    
     yoy_data <- TBHerds %>%
-      filter(Date %in% c(latest_date, prev_year_date)) %>%
       mutate(period = case_when(
-        Date == latest_date ~ "latest",
-        Date == prev_year_date ~ "previous"
+        Date >= latest_start & Date <= latest_date ~ "latest",
+        Date >= prev_year_start & Date <= prev_year_date ~ "previous"
       )) %>%
-      select(Area, period, Value) %>%
-      pivot_wider(names_from = period, values_from = Value) %>%
+      filter(!is.na(period)) %>%
+      group_by(Area, period) %>%
+      summarise(total = sum(Value, na.rm = TRUE), .groups = "drop") %>%
+      pivot_wider(names_from = period, values_from = total) %>%
       filter(!is.na(latest), !is.na(previous)) %>%
       mutate(
+        abs_change = latest - previous,
         pct_change = 100 * (latest - previous) / previous
       )
     
@@ -170,27 +189,77 @@ server <- function(input, output, session) {
       return(NULL)
     }
     
-    p <- ggplot(yoy_data, aes(x = reorder(Area, pct_change), y = pct_change, fill = pct_change > 0,
-                              text = paste0("Area: ", Area,
-                                            "<br>Latest: ", latest,
-                                            "<br>Previous: ", previous,
-                                            "<br>% Change: ", round(pct_change, 1), "%"))) +
+    p <- ggplot(yoy_data, aes(
+      x = reorder(Area, pct_change), y = abs_change, fill = abs_change > 0,
+      text = paste0(
+        "Area: ", Area,
+        "<br>Latest 12mo: ", latest,
+        "<br>Previous 12mo: ", previous,
+        "<br>Change: ", abs_change,
+        "<br>% Change: ", round(pct_change, 1), "%"
+      )
+    )) +
       geom_col() +
       coord_flip() +
       scale_fill_manual(values = c("TRUE" = "firebrick", "FALSE" = "forestgreen")) +
       labs(
-        title = paste("TB Reactor Herds YoY % Change —", format(latest_date, "%B %Y"), " vs ", 
-                      format(prev_year_date, "%B %Y")),
-        x = "Area", y = "% Change"
+        title = paste("TB Reactor Herds 12-Month Cumulative Change —",
+                      format(latest_start, "%b %Y"), "–", format(latest_date, "%b %Y"),
+                      " vs ",
+                      format(prev_year_start, "%b %Y"), "–", format(prev_year_date, "%b %Y")),
+        x = "Area", y = "Change in Counts"
       ) +
       theme_minimal() +
       theme(legend.position = "none")
     
     ggplotly(p, tooltip = "text")
   })
-
+  
+  # === TB Reactor Herds % Change Chart ===
+  
+  # output$pctChangePlotHerds <- renderPlotly({
+  #   latest_date <- max(TBHerds$Date)
+  #   prev_year_date <- latest_date %m-% years(1)
+  #   
+  #   yoy_data <- TBHerds %>%
+  #     filter(Date %in% c(latest_date, prev_year_date)) %>%
+  #     mutate(period = case_when(
+  #       Date == latest_date ~ "latest",
+  #       Date == prev_year_date ~ "previous"
+  #     )) %>%
+  #     select(Area, period, Value) %>%
+  #     pivot_wider(names_from = period, values_from = Value) %>%
+  #     filter(!is.na(latest), !is.na(previous)) %>%
+  #     mutate(
+  #       pct_change = 100 * (latest - previous) / previous
+  #     )
+  #   
+  #   if (nrow(yoy_data) == 0) {
+  #     message("No data to display for YoY change.")
+  #     return(NULL)
+  #   }
+  #   
+  #   p <- ggplot(yoy_data, aes(x = reorder(Area, pct_change), y = pct_change, fill = pct_change > 0,
+  #                             text = paste0("Area: ", Area,
+  #                                           "<br>Latest: ", latest,
+  #                                           "<br>Previous: ", previous,
+  #                                           "<br>% Change: ", round(pct_change, 1), "%"))) +
+  #     geom_col() +
+  #     coord_flip() +
+  #     scale_fill_manual(values = c("TRUE" = "firebrick", "FALSE" = "forestgreen")) +
+  #     labs(
+  #       title = paste("TB Reactor Herds YoY % Change —", format(latest_date, "%B %Y"), " vs ", 
+  #                     format(prev_year_date, "%B %Y")),
+  #       x = "Area", y = "% Change"
+  #     ) +
+  #     theme_minimal() +
+  #     theme(legend.position = "none")
+  #   
+  #   ggplotly(p, tooltip = "text")
+  # })
+  
   # === YOY TB Animal Data Table === #  
-  output$yoyTable <- DT::renderDataTable({
+  output$yoyTable <- renderDataTable({
     latest_date <- max(TBAni$Date)
     prev_year_date <- latest_date %m-% years(1)
     
@@ -211,11 +280,11 @@ server <- function(input, output, session) {
       select(Area, `Latest Period`, `Same Period Last Year`, `% Change`) %>%
       arrange(desc(`% Change`))
     
-    DT::datatable(yoy_data, options = list(pageLength = 15))
+    datatable(yoy_data, options = list(pageLength = 15))
   })
   
   # === YOY TB Herds Data Table === # 
-  output$yoyTableHerds <- DT::renderDataTable({
+  output$yoyTableHerds <- renderDataTable({
     latest_date <- max(TBHerds$Date)
     prev_year_date <- latest_date %m-% years(1)
     
@@ -236,94 +305,11 @@ server <- function(input, output, session) {
       select(Area, `Latest Period`, `Same Period Last Year`, `% Change`) %>%
       arrange(desc(`% Change`))
     
-    DT::datatable(yoy_data, options = list(pageLength = 15))
+    datatable(yoy_data, options = list(pageLength = 15))
   })
   
-  # === TB Animals Headline Pivot Table === # 
-  output$TBHPivot <- DT::renderDataTable({
-    
-    piv_data <- TBAniPIV %>%
-      select(-Year, -Month) %>%
-      arrange(desc(Date)) %>%
-      mutate(
-        block = ceiling(row_number() / 12),
-        Date = as.character(Date)   # <-- force to character
-      )
-    
-    # --- Step 1: compute block subtotals with nicer labels ---
-    block_sums <- piv_data %>%
-      group_by(block) %>%
-      summarise(across(where(is.numeric), sum), .groups = "drop") %>%
-      mutate(
-        Date = case_when(
-          block == 1 ~ "Subtotal – Previous 12 months",
-          block == 2 ~ "Subtotal – 13–24 months",
-          TRUE       ~ "Subtotal – 25+ months"
-        )
-      )
-    
-    # --- Step 2: split both data and subtotals by block ---
-    split_data <- split(piv_data, piv_data$block)
-    split_sums <- split(block_sums, block_sums$block)
-    
-    # --- Step 3: bind each block with its subtotal ---
-    piv_with_subs <- purrr::map2_dfr(
-      split_data,
-      split_sums,
-      ~ bind_rows(select(.x, -block), select(.y, -block))
-    )
-    
-    # --- Step 4: add % change row (if at least 2 blocks) ---
-    # Select numeric columns only for calculation
-    numeric_cols <- names(block_sums)[sapply(block_sums, is.numeric)]
-    
-    # Compute % change only for numeric columns
-    if (n_distinct(piv_data$block) >= 2) {
-      latest <- block_sums %>% filter(block == 1)
-      prior  <- block_sums %>% filter(block == 2)
-      
-      pct_change <- latest
-      pct_change[numeric_cols] <- round(
-        100 * (latest[numeric_cols] - prior[numeric_cols]) / prior[numeric_cols],
-        1
-      )
-      pct_change$Date <- "% CHANGE vs PREV 12MTHS"
-      
-      piv_with_subs <- bind_rows(select(pct_change, -block),piv_with_subs) %>%
-        relocate(Date, .before = everything()) 
-    }
-    
-    # --- Step 5: style the table ---
-    DT::datatable(
-      piv_with_subs,
-      options = list(pageLength = 36, dom = 't', ordering=FALSE),
-      rownames = FALSE
-    ) %>%
-      DT::formatStyle(
-        "Date",
-        target = "row",
-        fontWeight = DT::styleEqual(
-          c("Subtotal – Previous 12 months",
-            "Subtotal – 13–24 months",
-            "Subtotal – 25+ months",
-            "% CHANGE vs PREV 12MTHS"),
-          c("bold", "bold", "bold", "bold")
-        ),
-        color = DT::styleEqual(
-          c("% CHANGE vs PREV 12MTHS"),
-          c("blue")
-        ),
-        backgroundColor = DT::styleEqual(
-          c("Subtotal – Previous 12 months",
-            "Subtotal – 13–24 months",
-            "Subtotal – 25+ months"),
-          c("#f0f0f0", "#f0f0f0", "#f0f0f0")
-        )
-      )
-  })
-  
-  # === TB Animals Headline Pivot Table === # 
-  output$TBAPivot <- DT::renderDataTable({
+  # === TB Herds Headline Pivot Table === # 
+  output$TBHPivot <- renderDataTable({
     
     piv_data <- TBHerdsPIV %>%
       select(-Year, -Month) %>%
@@ -377,26 +363,109 @@ server <- function(input, output, session) {
     }
     
     # --- Step 5: style the table ---
-    DT::datatable(
+    datatable(
       piv_with_subs,
       options = list(pageLength = 36, dom = 't', ordering=FALSE),
       rownames = FALSE
     ) %>%
-      DT::formatStyle(
+      formatStyle(
         "Date",
         target = "row",
-        fontWeight = DT::styleEqual(
+        fontWeight = styleEqual(
           c("Subtotal – Previous 12 months",
             "Subtotal – 13–24 months",
             "Subtotal – 25+ months",
             "% CHANGE vs PREV 12MTHS"),
           c("bold", "bold", "bold", "bold")
         ),
-        color = DT::styleEqual(
+        color = styleEqual(
           c("% CHANGE vs PREV 12MTHS"),
           c("blue")
         ),
-        backgroundColor = DT::styleEqual(
+        backgroundColor = styleEqual(
+          c("Subtotal – Previous 12 months",
+            "Subtotal – 13–24 months",
+            "Subtotal – 25+ months"),
+          c("#f0f0f0", "#f0f0f0", "#f0f0f0")
+        )
+      )
+  })
+  
+  # === TB Animals Headline Pivot Table === # 
+  output$TBAPivot <- renderDataTable({
+    
+    piv_data <- TBAniPIV %>%
+      select(-Year, -Month) %>%
+      arrange(desc(Date)) %>%
+      mutate(
+        block = ceiling(row_number() / 12),
+        Date = as.character(Date)   # <-- force to character
+      )
+    
+    # --- Step 1: compute block subtotals with nicer labels ---
+    block_sums <- piv_data %>%
+      group_by(block) %>%
+      summarise(across(where(is.numeric), sum), .groups = "drop") %>%
+      mutate(
+        Date = case_when(
+          block == 1 ~ "Subtotal – Previous 12 months",
+          block == 2 ~ "Subtotal – 13–24 months",
+          TRUE       ~ "Subtotal – 25+ months"
+        )
+      )
+    
+    # --- Step 2: split both data and subtotals by block ---
+    split_data <- split(piv_data, piv_data$block)
+    split_sums <- split(block_sums, block_sums$block)
+    
+    # --- Step 3: bind each block with its subtotal ---
+    piv_with_subs <- purrr::map2_dfr(
+      split_data,
+      split_sums,
+      ~ bind_rows(select(.x, -block), select(.y, -block))
+    )
+    
+    # --- Step 4: add % change row (if at least 2 blocks) ---
+    # Select numeric columns only for calculation
+    numeric_cols <- names(block_sums)[sapply(block_sums, is.numeric)]
+    
+    # Compute % change only for numeric columns
+    if (n_distinct(piv_data$block) >= 2) {
+      latest <- block_sums %>% filter(block == 1)
+      prior  <- block_sums %>% filter(block == 2)
+      
+      pct_change <- latest
+      pct_change[numeric_cols] <- round(
+        100 * (latest[numeric_cols] - prior[numeric_cols]) / prior[numeric_cols],
+        1
+      )
+      pct_change$Date <- "% CHANGE vs PREV 12MTHS"
+      
+      piv_with_subs <- bind_rows(select(pct_change, -block),piv_with_subs) %>%
+        relocate(Date, .before = everything()) 
+    }
+    
+    # --- Step 5: style the table ---
+    datatable(
+      piv_with_subs,
+      options = list(pageLength = 36, dom = 't', ordering=FALSE),
+      rownames = FALSE
+    ) %>%
+      formatStyle(
+        "Date",
+        target = "row",
+        fontWeight = styleEqual(
+          c("Subtotal – Previous 12 months",
+            "Subtotal – 13–24 months",
+            "Subtotal – 25+ months",
+            "% CHANGE vs PREV 12MTHS"),
+          c("bold", "bold", "bold", "bold")
+        ),
+        color = styleEqual(
+          c("% CHANGE vs PREV 12MTHS"),
+          c("blue")
+        ),
+        backgroundColor = styleEqual(
           c("Subtotal – Previous 12 months",
             "Subtotal – 13–24 months",
             "Subtotal – 25+ months"),
@@ -406,7 +475,7 @@ server <- function(input, output, session) {
   })
   
   # === Annual Herd Prevalence ===
-  output$AnnualHP <- DT::renderDataTable({ 
+  output$AnnualHP <- renderDataTable({ 
     piv_data <- AnnualHP
     
     # create 19 breaks and 20 rgb color values ranging from white to red
@@ -414,14 +483,14 @@ server <- function(input, output, session) {
     clrs <- round(seq(255, 40, length.out = length(brks) + 1), 0) %>%
       {paste0("rgb(255,", ., ",", ., ")")}
     
-    DT::datatable(piv_data, options = list(pageLength = 25, dom='t', ordering=FALSE), rownames=FALSE) %>%
+    datatable(piv_data, options = list(pageLength = 25, dom='t', ordering=FALSE), rownames=FALSE) %>%
       
       formatStyle(names(piv_data), backgroundColor = styleInterval(brks, clrs))
     
-    })
+  })
   
   # === Annual Animal Prevalence ===
-  output$AnnualAP <- DT::renderDataTable({ 
+  output$AnnualAP <- renderDataTable({ 
     piv_data <- AnnualAP
     
     # create 19 breaks and 20 rgb color values ranging from white to red
@@ -429,14 +498,14 @@ server <- function(input, output, session) {
     clrs <- round(seq(255, 40, length.out = length(brks) + 1), 0) %>%
       {paste0("rgb(255,", ., ",", ., ")")}
     
-    DT::datatable(piv_data, options = list(pageLength = 25, dom='t', ordering=FALSE), rownames=FALSE) %>%
+    datatable(piv_data, options = list(pageLength = 25, dom='t', ordering=FALSE), rownames=FALSE) %>%
       
       formatStyle(names(piv_data), backgroundColor = styleInterval(brks, clrs))
     
   })
   
   # === Percentage of animals confirmed as infected and detected at post-mortem and not by skin test ===
-  output$TBCultPos <- DT::renderDataTable({ 
+  output$TBCultPos <- renderDataTable({ 
     piv_data <- TBCultPos
     
     # create 19 breaks and 20 rgb color values ranging from white to red
@@ -444,12 +513,12 @@ server <- function(input, output, session) {
     clrs <- round(seq(255, 40, length.out = length(brks) + 1), 0) %>%
       {paste0("rgb(255,", ., ",", ., ")")}
     
-    DT::datatable(piv_data, options = list(pageLength = 25, dom='t', ordering=FALSE), rownames=FALSE) %>%
+    datatable(piv_data, options = list(pageLength = 25, dom='t', ordering=FALSE), rownames=FALSE) %>%
       
       formatStyle(names(piv_data), backgroundColor = styleInterval(brks, clrs))
     
   })
-
+  
 }
 
 # Run App
