@@ -16,6 +16,8 @@ TBHerdsPIV <- read_csv("data/TB_ReactorHerds_SummaryPivot.csv")
 AnnualHP <- read.csv("data/TB_annualHP_Pivot.csv")
 AnnualAP <- read.csv("data/TB_annualAP_Pivot.csv")
 TBCultPos <- read.csv("data/TB_percTBCult_Pivot.csv")
+RollReactors <- read.csv("data/TB_rollingReactor_Pivot.csv")
+RollReactors$Date <- as.Date(RollReactors$Date)
 
 # Get latest data refresh date and time #TODO
 refreshDatetime <- format(file.info("data/TB_percTBCult_Pivot.csv")$mtime, "%Y-%m-%d %H:%M")
@@ -66,6 +68,11 @@ ui <- fluidPage(
     tabPanel("% Animals Infected Detected Post-Mortem",
              h4("Annual Percentage of animals confirmed as infected and detected at post-mortem and not by skin test 2005 - present"),
              DTOutput("TBCultPos")
+    ),
+    tabPanel("Number of Reactor Animals per Reactor Herd",
+             plotlyOutput("tsReactPH"),
+             h4("Rolling 12-Month Count of Reactor Animals, Reactor Herds and Reactor Animals per Reactor Herd"),
+             DTOutput("TBReactPH")
     )
   )
 )
@@ -84,7 +91,7 @@ server <- function(input, output, session) {
       geom_line(linewidth = 1) +
       geom_point() +
       labs(title = "TB Reactor Animals Time Series by Area", x = "Date", y = "Value") +
-      theme_minimal()
+      theme_gray()
     
     ggplotly(p)
   })
@@ -100,7 +107,7 @@ server <- function(input, output, session) {
       geom_line(linewidth = 1) +
       geom_point() +
       labs(title = "TB Reactor Herds Time Series by Area", x = "Date", y = "Value") +
-      theme_minimal()
+      theme_gray()
     
     ggplotly(p)
   })
@@ -154,7 +161,7 @@ server <- function(input, output, session) {
                       format(prev_year_start, "%b %Y"), "–", format(prev_year_date, "%b %Y")),
         x = "Area", y = "Change in Counts"
       ) +
-      theme_minimal() +
+      theme_gray() +
       theme(legend.position = "none")
     
     ggplotly(p, tooltip = "text")
@@ -209,57 +216,14 @@ server <- function(input, output, session) {
                       format(prev_year_start, "%b %Y"), "–", format(prev_year_date, "%b %Y")),
         x = "Area", y = "Change in Counts"
       ) +
-      theme_minimal() +
+      theme_gray() +
       theme(legend.position = "none")
     
     ggplotly(p, tooltip = "text")
   })
   
-  # === TB Reactor Herds % Change Chart ===
-  
-  # output$pctChangePlotHerds <- renderPlotly({
-  #   latest_date <- max(TBHerds$Date)
-  #   prev_year_date <- latest_date %m-% years(1)
-  #   
-  #   yoy_data <- TBHerds %>%
-  #     filter(Date %in% c(latest_date, prev_year_date)) %>%
-  #     mutate(period = case_when(
-  #       Date == latest_date ~ "latest",
-  #       Date == prev_year_date ~ "previous"
-  #     )) %>%
-  #     select(Area, period, Value) %>%
-  #     pivot_wider(names_from = period, values_from = Value) %>%
-  #     filter(!is.na(latest), !is.na(previous)) %>%
-  #     mutate(
-  #       pct_change = 100 * (latest - previous) / previous
-  #     )
-  #   
-  #   if (nrow(yoy_data) == 0) {
-  #     message("No data to display for YoY change.")
-  #     return(NULL)
-  #   }
-  #   
-  #   p <- ggplot(yoy_data, aes(x = reorder(Area, pct_change), y = pct_change, fill = pct_change > 0,
-  #                             text = paste0("Area: ", Area,
-  #                                           "<br>Latest: ", latest,
-  #                                           "<br>Previous: ", previous,
-  #                                           "<br>% Change: ", round(pct_change, 1), "%"))) +
-  #     geom_col() +
-  #     coord_flip() +
-  #     scale_fill_manual(values = c("TRUE" = "firebrick", "FALSE" = "forestgreen")) +
-  #     labs(
-  #       title = paste("TB Reactor Herds YoY % Change —", format(latest_date, "%B %Y"), " vs ", 
-  #                     format(prev_year_date, "%B %Y")),
-  #       x = "Area", y = "% Change"
-  #     ) +
-  #     theme_minimal() +
-  #     theme(legend.position = "none")
-  #   
-  #   ggplotly(p, tooltip = "text")
-  # })
-  
   # === YOY TB Animal Data Table === #  
-  output$yoyTable <- renderDataTable({
+  output$yoyTable <- renderDT({
     latest_date <- max(TBAni$Date)
     prev_year_date <- latest_date %m-% years(1)
     
@@ -284,7 +248,7 @@ server <- function(input, output, session) {
   })
   
   # === YOY TB Herds Data Table === # 
-  output$yoyTableHerds <- renderDataTable({
+  output$yoyTableHerds <- renderDT({
     latest_date <- max(TBHerds$Date)
     prev_year_date <- latest_date %m-% years(1)
     
@@ -309,7 +273,7 @@ server <- function(input, output, session) {
   })
   
   # === TB Herds Headline Pivot Table === # 
-  output$TBHPivot <- renderDataTable({
+  output$TBHPivot <- renderDT({
     
     piv_data <- TBHerdsPIV %>%
       select(-Year, -Month) %>%
@@ -392,7 +356,7 @@ server <- function(input, output, session) {
   })
   
   # === TB Animals Headline Pivot Table === # 
-  output$TBAPivot <- renderDataTable({
+  output$TBAPivot <- renderDT({
     
     piv_data <- TBAniPIV %>%
       select(-Year, -Month) %>%
@@ -475,7 +439,7 @@ server <- function(input, output, session) {
   })
   
   # === Annual Herd Prevalence ===
-  output$AnnualHP <- renderDataTable({ 
+  output$AnnualHP <- renderDT({ 
     piv_data <- AnnualHP
     
     # create 19 breaks and 20 rgb color values ranging from white to red
@@ -490,7 +454,7 @@ server <- function(input, output, session) {
   })
   
   # === Annual Animal Prevalence ===
-  output$AnnualAP <- renderDataTable({ 
+  output$AnnualAP <- renderDT({ 
     piv_data <- AnnualAP
     
     # create 19 breaks and 20 rgb color values ranging from white to red
@@ -505,7 +469,7 @@ server <- function(input, output, session) {
   })
   
   # === Percentage of animals confirmed as infected and detected at post-mortem and not by skin test ===
-  output$TBCultPos <- renderDataTable({ 
+  output$TBCultPos <- renderDT({ 
     piv_data <- TBCultPos
     
     # create 19 breaks and 20 rgb color values ranging from white to red
@@ -519,6 +483,26 @@ server <- function(input, output, session) {
     
   })
   
+  # === Overall No of Reactor Animals per Reactor Herd (Rolling 12-months) ===
+  output$tsReactPH <- renderPlotly({
+    p <- ggplot(RollReactors, aes(x = Date, y = ReactorsPerHerd)) +
+      geom_line(linewidth = 1) + geom_point() +
+      labs(title = "No of Reactor Animals per Reactor Herd (Rolling 12-months)", x = "Date", y = "ReactorsPerHerd") + 
+      ylim(0, max(RollReactors$ReactorsPerHerd, na.rm = TRUE)) +
+      theme_gray() 
+    ggplotly(p)
+  })
+  
+  # === Overall No of Reactor Animals per Reactor Herd (Rolling 12-months) Datatable ===
+  output$TBReactPH <- renderDT({ 
+    piv_data <- RollReactors %>% arrange(desc(Date))
+    
+    datatable(piv_data, options = list(pageLength = 24, dom='top', ordering=TRUE), rownames=FALSE) %>%
+      
+      formatStyle(names(piv_data))
+    
+  })
+
 }
 
 # Run App
