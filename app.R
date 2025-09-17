@@ -7,6 +7,10 @@ library(gitlink)
 library(lubridate)
 library(plotly)
 library(DT)
+library(sf)          # for reading shapefiles/geojson
+library(dplyr)
+library(ggplot2)
+library(tidyr)
 
 # Read data from CSV files
 TBAni <- read_csv("data/TB_Animal_SummaryLong.csv")
@@ -21,6 +25,12 @@ RollReactors$Date <- as.Date(RollReactors$Date)
 
 # Get latest data refresh date and time #TODO
 refreshDatetime <- format(file.info("data/TB_percTBCult_Pivot.csv")$mtime, "%Y-%m-%d %H:%M")
+
+latest_date <- max(TBAni$Date)
+prev_year_date <- latest_date %m-% years(1)
+# Define 12-month windows
+latest_start <- latest_date %m-% months(11)
+prev_year_start <- prev_year_date %m-% months(11)
 
 # Shiny UI ----
 # UI
@@ -37,11 +47,18 @@ ui <- fluidPage(
                          choices = unique(TBAni$Area), 
                          selected = "Armagh", multiple = TRUE),
              br(),
+             h3("TB Reactor Animals by Area Time Series"),
              plotlyOutput("tsPlot"),
              br(),
+             h3(paste("TB Reactor Animals 12-Month Cumulative Change:",
+                      format(latest_start, "%b %Y"), "to", format(latest_date, "%b %Y"),
+                      " vs ",
+                      format(prev_year_start, "%b %Y"), "to", format(prev_year_date, "%b %Y"))),
              plotlyOutput("pctChangePlot"),
              br(),
-             h4("Count of TB Reactor Animals over the past 3 calendar years"),
+             #h3("TB Reactor Animals Map"),
+             #plotlyOutput("tbAniMap", width = "100%", height = "900px"),
+             h3("Count of TB Reactor Animals over the past 3 calendar years"),
              DTOutput("TBAPivot")
     ),
     tabPanel("TB Reactor Herds",
@@ -50,32 +67,48 @@ ui <- fluidPage(
                          choices = unique(TBHerds$Area), 
                          selected = "Armagh", multiple = TRUE),
              br(),
+             h3("TB Reactor Herds by Area"),
              plotlyOutput("tsPlotHerds"),
              br(),
+             h3(paste("TB Reactor Herds 12-Month Cumulative Change:",
+                      format(latest_start, "%b %Y"), "to", format(latest_date, "%b %Y"),
+                      " vs ",
+                      format(prev_year_start, "%b %Y"), "to", format(prev_year_date, "%b %Y"))),
              plotlyOutput("pctChangePlotHerds"),
              br(),
-             h4("Count of TB Reactor Herds over the past 3 calendar years"),
+             h3("Count of TB Reactor Herds over the past 3 calendar years"),
              DTOutput("TBHPivot")
     ),
     tabPanel("Annual Herd Prevalence",
-             h4("Annual Herd Prevalence 2005 - present"),
+             h3("Annual Herd Prevalence 2005 - present"),
              DTOutput("AnnualHP")
     ),
     tabPanel("Annual Animal Prevalence",
-             h4("Annual Animal Prevalence 2005 - present"),
+             h3("Annual Animal Prevalence 2005 - present"),
              DTOutput("AnnualAP")
     ),
     tabPanel("% Animals Infected Detected Post-Mortem",
-             h4("Annual Percentage of animals confirmed as infected and detected at post-mortem and not by skin test 2005 - present"),
+             h3("Annual Percentage of animals confirmed as infected and detected at post-mortem and not by skin test 2005 - present"),
              DTOutput("TBCultPos")
     ),
     tabPanel("Number of Reactor Animals per Reactor Herd",
+             h3("No of Reactor Animals per Reactor Herd (Rolling 12-months)"),
              plotlyOutput("tsReactPH"),
-             h4("Rolling 12-Month Count of Reactor Animals, Reactor Herds and Reactor Animals per Reactor Herd"),
+             h3("Rolling 12-Month Count of Reactor Animals, Reactor Herds and Reactor Animals per Reactor Herd"),
              DTOutput("TBReactPH")
     )
   )
 )
+
+# Helper function for color breaks and palette
+get_color_breaks_and_palette <- function(df, exclude_cols = "Statistic") {
+  # Exclude specified columns for breaks calculation
+  numeric_data <- df %>% select(-any_of(exclude_cols))
+  brks <- quantile(numeric_data, probs = seq(.05, .95, .05), na.rm = TRUE)
+  clrs <- round(seq(255, 40, length.out = length(brks) + 1), 0) %>%
+    {paste0("rgb(255,", ., ",", ., ")")}
+  list(breaks = brks, colors = clrs)
+}
 
 # Server
 server <- function(input, output, session) {
@@ -90,10 +123,10 @@ server <- function(input, output, session) {
     p <- ggplot(filtered_data(), aes(x = Date, y = Value, color = Area)) +
       geom_line(linewidth = 1) +
       geom_point() +
-      labs(title = "TB Reactor Animals Time Series by Area", x = "Date", y = "Value") +
-      theme_gray()
-    
-    ggplotly(p)
+      labs(x = "Date", y = "Value") +
+      theme_gray() 
+
+    ggplotly(p) %>% layout(legend = list(orientation = "h", y=-0.5))
   })
   
   # For herds
@@ -106,10 +139,10 @@ server <- function(input, output, session) {
     p <- ggplot(filtered_data2(), aes(x = Date, y = Value, color = Area)) +
       geom_line(linewidth = 1) +
       geom_point() +
-      labs(title = "TB Reactor Herds Time Series by Area", x = "Date", y = "Value") +
+      labs(x = "Date", y = "Value") +
       theme_gray()
     
-    ggplotly(p)
+    ggplotly(p) %>% layout(legend = list(orientation = "h", y=-0.5))
   })
   
   # === TB Reactor Animals 12-Month Cumulative Change Chart ===
@@ -154,14 +187,8 @@ server <- function(input, output, session) {
       geom_col() +
       coord_flip() +
       scale_fill_manual(values = c("TRUE" = "firebrick", "FALSE" = "forestgreen")) +
-      labs(
-        title = paste("TB Reactor Animals 12-Month Cumulative Change —",
-                      format(latest_start, "%b %Y"), "–", format(latest_date, "%b %Y"),
-                      " vs ",
-                      format(prev_year_start, "%b %Y"), "–", format(prev_year_date, "%b %Y")),
-        x = "Area", y = "Change in Counts"
-      ) +
-      theme_gray() +
+      labs(x = "Area", y = "Change in Counts") +
+      #theme_gray() +
       theme(legend.position = "none")
     
     ggplotly(p, tooltip = "text")
@@ -209,14 +236,7 @@ server <- function(input, output, session) {
       geom_col() +
       coord_flip() +
       scale_fill_manual(values = c("TRUE" = "firebrick", "FALSE" = "forestgreen")) +
-      labs(
-        title = paste("TB Reactor Herds 12-Month Cumulative Change —",
-                      format(latest_start, "%b %Y"), "–", format(latest_date, "%b %Y"),
-                      " vs ",
-                      format(prev_year_start, "%b %Y"), "–", format(prev_year_date, "%b %Y")),
-        x = "Area", y = "Change in Counts"
-      ) +
-      theme_gray() +
+      labs(x = "Area", y = "Change in Counts") +
       theme(legend.position = "none")
     
     ggplotly(p, tooltip = "text")
@@ -440,57 +460,45 @@ server <- function(input, output, session) {
   
   # === Annual Herd Prevalence ===
   output$AnnualHP <- renderDT({ 
-    piv_data <- AnnualHP
+    piv_data <- AnnualHP %>%
+      mutate(across(where(is.numeric), round, digits=2))
     
-    # create 19 breaks and 20 rgb color values ranging from white to red
-    brks <- quantile((piv_data %>% select(-Statistic)), probs = seq(.05, .95, .05), na.rm = TRUE)
-    clrs <- round(seq(255, 40, length.out = length(brks) + 1), 0) %>%
-      {paste0("rgb(255,", ., ",", ., ")")}
+    color_info <- get_color_breaks_and_palette(piv_data, exclude_cols = "Statistic")
     
     datatable(piv_data, options = list(pageLength = 25, dom='t', ordering=FALSE), rownames=FALSE) %>%
-      
-      formatStyle(names(piv_data), backgroundColor = styleInterval(brks, clrs))
-    
+      formatStyle(names(piv_data), backgroundColor = styleInterval(color_info$breaks, color_info$colors))
   })
   
   # === Annual Animal Prevalence ===
   output$AnnualAP <- renderDT({ 
-    piv_data <- AnnualAP
+    piv_data <- AnnualAP %>%
+      mutate(across(where(is.numeric), round, digits=2))
     
-    # create 19 breaks and 20 rgb color values ranging from white to red
-    brks <- quantile((piv_data %>% select(-Statistic)), probs = seq(.05, .95, .05), na.rm = TRUE)
-    clrs <- round(seq(255, 40, length.out = length(brks) + 1), 0) %>%
-      {paste0("rgb(255,", ., ",", ., ")")}
+    color_info <- get_color_breaks_and_palette(piv_data, exclude_cols = "Statistic")
     
     datatable(piv_data, options = list(pageLength = 25, dom='t', ordering=FALSE), rownames=FALSE) %>%
-      
-      formatStyle(names(piv_data), backgroundColor = styleInterval(brks, clrs))
-    
+      formatStyle(names(piv_data), backgroundColor = styleInterval(color_info$breaks, color_info$colors))
   })
   
   # === Percentage of animals confirmed as infected and detected at post-mortem and not by skin test ===
   output$TBCultPos <- renderDT({ 
-    piv_data <- TBCultPos
+    piv_data <- TBCultPos %>%
+      mutate(across(where(is.numeric), round, digits=2))
     
-    # create 19 breaks and 20 rgb color values ranging from white to red
-    brks <- quantile((piv_data %>% select(-Statistic)), probs = seq(.05, .95, .05), na.rm = TRUE)
-    clrs <- round(seq(255, 40, length.out = length(brks) + 1), 0) %>%
-      {paste0("rgb(255,", ., ",", ., ")")}
+    color_info <- get_color_breaks_and_palette(piv_data, exclude_cols = "Statistic")
     
     datatable(piv_data, options = list(pageLength = 25, dom='t', ordering=FALSE), rownames=FALSE) %>%
-      
-      formatStyle(names(piv_data), backgroundColor = styleInterval(brks, clrs))
-    
+      formatStyle(names(piv_data), backgroundColor = styleInterval(color_info$breaks, color_info$colors))
   })
   
   # === Overall No of Reactor Animals per Reactor Herd (Rolling 12-months) ===
   output$tsReactPH <- renderPlotly({
     p <- ggplot(RollReactors, aes(x = Date, y = ReactorsPerHerd)) +
       geom_line(linewidth = 1) + geom_point() +
-      labs(title = "No of Reactor Animals per Reactor Herd (Rolling 12-months)", x = "Date", y = "ReactorsPerHerd") + 
-      ylim(0, max(RollReactors$ReactorsPerHerd, na.rm = TRUE)) +
-      theme_gray() 
-    ggplotly(p)
+      labs(x = "Date", y = "ReactorsPerHerd") + 
+      ylim(0, max(RollReactors$ReactorsPerHerd, na.rm = TRUE)) 
+
+    p
   })
   
   # === Overall No of Reactor Animals per Reactor Herd (Rolling 12-months) Datatable ===
@@ -498,7 +506,8 @@ server <- function(input, output, session) {
     piv_data <- RollReactors %>% arrange(desc(Date))
     
     datatable(piv_data, options = list(pageLength = 24, dom='top', ordering=TRUE), rownames=FALSE) %>%
-      
+      formatRound(columns="ReactorsPerHerd", digits=4) %>%
+      formatCurrency(columns=c("RollingTotal_Animals","RollingTotal_Herds"), currency="", interval=3, digits=0, mark=",") %>%
       formatStyle(names(piv_data))
     
   })

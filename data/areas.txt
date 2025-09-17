@@ -1,0 +1,11 @@
+Area,lat,lon
+Armagh,54.35,-6.6667
+Ballymena,54.86357,-6.27628
+Coleraine,55.13333,-6.66667
+Dungannon,54.50344,-6.76723
+Enniskillen,54.34615,-7.64133
+L'derry/Strabane,54.9981,-7.30934
+Mallusk,54.6849,-6.0102
+Newry,54.17841,-6.33739
+Nt'Ards,54.59236,-5.69092
+Omagh,54.6,-7.3
