@@ -7,7 +7,6 @@ library(gitlink)
 library(lubridate)
 library(plotly)
 library(DT)
-library(sf)          # for reading shapefiles/geojson
 library(dplyr)
 library(ggplot2)
 library(tidyr)
