@@ -10,6 +10,7 @@ library(DT)
 library(dplyr)
 library(ggplot2)
 library(tidyr)
+library(sf)
 
 # Read data from CSV files
 TBAni <- read_csv("data/TB_Animal_SummaryLong.csv")
@@ -22,7 +23,6 @@ TBCultPos <- read.csv("data/TB_percTBCult_Pivot.csv")
 RollReactors <- read.csv("data/TB_rollingReactor_Pivot.csv")
 RollReactors$Date <- as.Date(RollReactors$Date)
 
-# Get latest data refresh date and time #TODO
 refreshDatetime <- format(file.info("data/TB_percTBCult_Pivot.csv")$mtime, "%Y-%m-%d %H:%M")
 
 latest_date <- max(TBAni$Date)
@@ -55,8 +55,8 @@ ui <- fluidPage(
                       format(prev_year_start, "%b %Y"), "to", format(prev_year_date, "%b %Y"))),
              plotlyOutput("pctChangePlot"),
              br(),
-             #h3("TB Reactor Animals Map"),
-             #plotlyOutput("tbAniMap", width = "100%", height = "900px"),
+             h3("TB Reactor Animals 12-Month Cumulative Change Map"),
+             plotlyOutput("tbAniMap", width = "100%", height = "900px"),
              h3("Count of TB Reactor Animals over the past 3 calendar years"),
              DTOutput("TBAPivot")
     ),
@@ -75,6 +75,8 @@ ui <- fluidPage(
                       format(prev_year_start, "%b %Y"), "to", format(prev_year_date, "%b %Y"))),
              plotlyOutput("pctChangePlotHerds"),
              br(),
+             h3("TB Reactor Herds 12-Month Cumulative Change Map"),
+             plotlyOutput("tbHerdsMap", width = "100%", height = "900px"),
              h3("Count of TB Reactor Herds over the past 3 calendar years"),
              DTOutput("TBHPivot")
     ),
@@ -509,6 +511,184 @@ server <- function(input, output, session) {
       formatCurrency(columns=c("RollingTotal_Animals","RollingTotal_Herds"), currency="", interval=3, digits=0, mark=",") %>%
       formatStyle(names(piv_data))
     
+  })
+  
+  # === TB Reactor Animals Map ===
+  output$tbAniMap <- renderPlotly({
+    latest_date <- max(TBAni$Date)
+    prev_year_date <- latest_date %m-% years(1)
+    
+    # Define 12-month windows
+    latest_start <- latest_date %m-% months(11)
+    prev_year_start <- prev_year_date %m-% months(11)
+    
+    # Compute 12-month totals
+    yoy_data <- TBAni %>%
+      mutate(period = case_when(
+        Date >= latest_start & Date <= latest_date ~ "latest",
+        Date >= prev_year_start & Date <= prev_year_date ~ "previous"
+      )) %>%
+      filter(!is.na(period)) %>%
+      group_by(Area, period) %>%
+      summarise(total = sum(Value, na.rm = TRUE), .groups = "drop") %>%
+      pivot_wider(names_from = period, values_from = total) %>%
+      filter(!is.na(latest), !is.na(previous)) %>%
+      mutate(
+        abs_change = latest - previous,
+        pct_change = 100 * (latest - previous) / previous
+      )
+    
+    # Compute most recent month counts
+    latest_month_data <- TBAni %>%
+      filter(Date == latest_date) %>%
+      group_by(Area) %>%
+      summarise(latest_month_count = sum(Value, na.rm = TRUE), .groups = "drop")
+    
+    # Load coordinates
+    dvo_shapes <- st_read("data/dvo_regions_main.geojson")
+    
+    # Join with TB dataset
+    map_data <- dvo_shapes %>%
+      left_join(yoy_data, by = "Area")
+    
+    map_data <- map_data[complete.cases(map_data$Area), ]
+    
+    map_data %>%
+      select(Area, latest, previous, pct_change) %>%
+      as.data.frame()
+    
+    if (nrow(map_data) == 0) {
+      message("No data to display on map.")
+      return(NULL)
+    }
+    
+    # --- colour palette: prefer viridis (colour-blind friendly) ---
+    if (requireNamespace("viridisLite", quietly = TRUE)) {
+      colours_for_plot <- viridisLite::viridis(100)
+    } else {
+      # fallback: a simple diverging ramp (readable even without viridis)
+      colours_for_plot <- colorRampPalette(c("#2166ac","#f7f7f7","#b2182b"))(100)
+    }
+    
+    # Use the saved GeoJSON file
+    geojson_obj <- jsonlite::fromJSON("data/dvo_regions_main.geojson", simplifyVector = FALSE)
+    
+    p <- plot_ly(
+      type = "choroplethmapbox",
+      geojson = geojson_obj,
+      locations = map_data$Area,             # ✅ use joined data
+      z = map_data$pct_change,               # ✅ same source
+      featureidkey = "properties.Area",
+      text = ~paste0(
+        "<b>", map_data$Area, "</b><br>",
+        "12mo Latest: ", map_data$latest, "<br>",
+        "12mo Previous: ", map_data$previous, "<br>",
+        "Change: ", map_data$abs_change, "<br>",
+        "% Change: ", round(map_data$pct_change, 1), "%"
+      ),
+      hoverinfo = "text",
+      colorscale = "Viridis",
+      marker = list(line = list(width = 0.5, color = "black"))
+      ) %>%
+      layout(
+        mapbox = list(
+          style = "carto-positron",
+          zoom = 8,
+          center = list(lat = 54.6, lon = -6.7)
+        ),
+        title = paste("TB Reactor Animals % Change by DVO Region ( 12 months to", format(latest_date, "%B %Y"),")")
+      )
+    
+    p
+  })
+  
+  # === TB Reactor Herds Map ===
+  output$tbHerdsMap <- renderPlotly({
+    latest_date <- max(TBHerds$Date)
+    prev_year_date <- latest_date %m-% years(1)
+    
+    # Define 12-month windows
+    latest_start <- latest_date %m-% months(11)
+    prev_year_start <- prev_year_date %m-% months(11)
+    
+    # Compute 12-month totals
+    yoy_data <- TBHerds %>%
+      mutate(period = case_when(
+        Date >= latest_start & Date <= latest_date ~ "latest",
+        Date >= prev_year_start & Date <= prev_year_date ~ "previous"
+      )) %>%
+      filter(!is.na(period)) %>%
+      group_by(Area, period) %>%
+      summarise(total = sum(Value, na.rm = TRUE), .groups = "drop") %>%
+      pivot_wider(names_from = period, values_from = total) %>%
+      filter(!is.na(latest), !is.na(previous)) %>%
+      mutate(
+        abs_change = latest - previous,
+        pct_change = 100 * (latest - previous) / previous
+      )
+    
+    # Compute most recent month counts
+    latest_month_data <- TBHerds %>%
+      filter(Date == latest_date) %>%
+      group_by(Area) %>%
+      summarise(latest_month_count = sum(Value, na.rm = TRUE), .groups = "drop")
+    
+    # Load coordinates
+    dvo_shapes <- st_read("data/dvo_regions_main.geojson")
+    
+    # Join with TB dataset
+    map_data <- dvo_shapes %>%
+      left_join(yoy_data, by = "Area")
+    
+    map_data <- map_data[complete.cases(map_data$Area), ]
+    
+    map_data %>%
+      select(Area, latest, previous, pct_change) %>%
+      as.data.frame()
+    
+    if (nrow(map_data) == 0) {
+      message("No data to display on map.")
+      return(NULL)
+    }
+    
+    # --- colour palette: prefer viridis (colour-blind friendly) ---
+    if (requireNamespace("viridisLite", quietly = TRUE)) {
+      colours_for_plot <- viridisLite::viridis(100)
+    } else {
+      # fallback: a simple diverging ramp (readable even without viridis)
+      colours_for_plot <- colorRampPalette(c("#2166ac","#f7f7f7","#b2182b"))(100)
+    }
+    
+    # Use the saved GeoJSON file
+    geojson_obj <- jsonlite::fromJSON("data/dvo_regions_main.geojson", simplifyVector = FALSE)
+    
+    p <- plot_ly(
+      type = "choroplethmapbox",
+      geojson = geojson_obj,
+      locations = map_data$Area,             # ✅ use joined data
+      z = map_data$pct_change,               # ✅ same source
+      featureidkey = "properties.Area",
+      text = ~paste0(
+        "<b>", map_data$Area, "</b><br>",
+        "12mo Latest: ", map_data$latest, "<br>",
+        "12mo Previous: ", map_data$previous, "<br>",
+        "Change: ", map_data$abs_change, "<br>",
+        "% Change: ", round(map_data$pct_change, 1), "%"
+      ),
+      hoverinfo = "text",
+      colorscale = "Viridis",
+      marker = list(line = list(width = 0.5, color = "black"))
+    ) %>%
+      layout(
+        mapbox = list(
+          style = "carto-positron",
+          zoom = 8,
+          center = list(lat = 54.6, lon = -6.7)
+        ),
+        title = paste("TB Reactor Herds % Change by DVO Region ( 12 months to", format(latest_date, "%B %Y"),")")
+      )
+    
+    p
   })
 
 }
