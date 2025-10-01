@@ -448,9 +448,6 @@ server <- function(input, output, session) {
       colours_for_plot <- colorRampPalette(c("#2166ac","#f7f7f7","#b2182b"))(100)
     }
     
-    # Use the saved GeoJSON file
-    geojson_obj <- jsonlite::fromJSON("data/dvo_regions_main.geojson", simplifyVector = FALSE)
-    
     p <- plot_ly(
       type = "choroplethmapbox",
       geojson = geojson_obj,
@@ -503,9 +500,6 @@ server <- function(input, output, session) {
       # fallback: a simple diverging ramp (readable even without viridis)
       colours_for_plot <- colorRampPalette(c("#2166ac","#f7f7f7","#b2182b"))(100)
     }
-    
-    # Use the saved GeoJSON file
-    geojson_obj <- jsonlite::fromJSON("data/dvo_regions_main.geojson", simplifyVector = FALSE)
     
     p <- plot_ly(
       type = "choroplethmapbox",
