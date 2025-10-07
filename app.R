@@ -440,19 +440,11 @@ server <- function(input, output, session) {
       return(NULL)
     }
     
-    # --- colour palette: prefer viridis (colour-blind friendly) ---
-    if (requireNamespace("viridisLite", quietly = TRUE)) {
-      colours_for_plot <- viridisLite::viridis(100)
-    } else {
-      # fallback: a simple diverging ramp (readable even without viridis)
-      colours_for_plot <- colorRampPalette(c("#2166ac","#f7f7f7","#b2182b"))(100)
-    }
-    
     p <- plot_ly(
       type = "choroplethmapbox",
       geojson = geojson_obj,
-      locations = map_data$Area,             # ✅ use joined data
-      z = map_data$pct_change,               # ✅ same source
+      locations = map_data$Area,
+      z = map_data$abs_change,
       featureidkey = "properties.Area",
       text = ~paste0(
         "<b>", map_data$Area, "</b><br>",
@@ -462,7 +454,7 @@ server <- function(input, output, session) {
         "% Change: ", round(map_data$pct_change, 1), "%"
       ),
       hoverinfo = "text",
-      colorscale = colours_for_plot,
+      colorscale = "Viridis",
       marker = list(line = list(width = 0.5, color = "black"))
       ) %>%
       layout(
@@ -471,7 +463,7 @@ server <- function(input, output, session) {
           zoom = 8,
           center = list(lat = 54.6, lon = -6.7)
         ),
-        title = paste("TB Reactor Animals % Change by DVO Region ( 12 months to", format(latest_date, "%B %Y"),")")
+        title = paste("TB Reactor Animals Change by DVO Region ( 12 months to", format(latest_date, "%B %Y"),")")
       )
     
     p
@@ -493,19 +485,11 @@ server <- function(input, output, session) {
       return(NULL)
     }
     
-    # --- colour palette: prefer viridis (colour-blind friendly) ---
-    if (requireNamespace("viridisLite", quietly = TRUE)) {
-      colours_for_plot <- viridisLite::viridis(100)
-    } else {
-      # fallback: a simple diverging ramp (readable even without viridis)
-      colours_for_plot <- colorRampPalette(c("#2166ac","#f7f7f7","#b2182b"))(100)
-    }
-    
     p <- plot_ly(
       type = "choroplethmapbox",
       geojson = geojson_obj,
       locations = map_data$Area,
-      z = map_data$pct_change,
+      z = map_data$abs_change,
       featureidkey = "properties.Area",
       text = ~paste0(
         "<b>", map_data$Area, "</b><br>",
@@ -515,7 +499,7 @@ server <- function(input, output, session) {
         "% Change: ", round(map_data$pct_change, 1), "%"
       ),
       hoverinfo = "text",
-      colorscale = colours_for_plot,
+      colorscale = "Viridis",
       marker = list(line = list(width = 0.5, color = "black"))
     ) %>%
       layout(
@@ -524,7 +508,7 @@ server <- function(input, output, session) {
           zoom = 8,
           center = list(lat = 54.6, lon = -6.7)
         ),
-        title = paste("TB Reactor Herds % Change by DVO Region ( 12 months to", format(latest_date, "%B %Y"),")")
+        title = paste("TB Reactor Herds Change by DVO Region ( 12 months to", format(latest_date, "%B %Y"),")")
       )
     
     p
