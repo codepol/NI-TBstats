@@ -460,7 +460,7 @@ server <- function(input, output, session) {
       layout(
         mapbox = list(
           style = "carto-positron",
-          zoom = 8,
+          zoom = 7.5,
           center = list(lat = 54.6, lon = -6.7)
         ),
         title = paste("TB Reactor Animals Change by DVO Region ( 12 months to", format(latest_date, "%B %Y"),")")
@@ -505,7 +505,7 @@ server <- function(input, output, session) {
       layout(
         mapbox = list(
           style = "carto-positron",
-          zoom = 8,
+          zoom = 7.5,
           center = list(lat = 54.6, lon = -6.7)
         ),
         title = paste("TB Reactor Herds Change by DVO Region ( 12 months to", format(latest_date, "%B %Y"),")")
