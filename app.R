@@ -455,6 +455,7 @@ server <- function(input, output, session) {
       ),
       hoverinfo = "text",
       colorscale = "Viridis",
+      colorbar = list(title = "Count (+/-)"),
       marker = list(line = list(width = 0.5, color = "black"))
       ) %>%
       layout(
@@ -500,6 +501,7 @@ server <- function(input, output, session) {
       ),
       hoverinfo = "text",
       colorscale = "Viridis",
+      colorbar = list(title = "Count (+/-)"),
       marker = list(line = list(width = 0.5, color = "black"))
     ) %>%
       layout(
