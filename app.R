@@ -12,14 +12,14 @@ library(ggplot2)
 library(tidyr)
 
 # Read data from CSV files
-TBAni <- read_csv("data/TB_Animal_SummaryLong.csv")
-TBAniPIV <- read_csv("data/TB_Animal_SummaryPivot.csv")
-TBHerds <- read_csv("data/TB_ReactorHerds_SummaryAll.csv")
-TBHerdsPIV <- read_csv("data/TB_ReactorHerds_SummaryPivot.csv")
-AnnualHP <- read_csv("data/TB_annualHP_Pivot.csv")
-AnnualAP <- read_csv("data/TB_annualAP_Pivot.csv")
-TBCultPos <- read_csv("data/TB_percTBCult_Pivot.csv")
-RollReactors <- read_csv("data/TB_rollingReactor_Pivot.csv")
+TBAni <- read_csv("data/TB_Animal_SummaryLong.csv", show_col_types = FALSE)
+TBAniPIV <- read_csv("data/TB_Animal_SummaryPivot.csv", show_col_types = FALSE)
+TBHerds <- read_csv("data/TB_ReactorHerds_SummaryAll.csv", show_col_types = FALSE)
+TBHerdsPIV <- read_csv("data/TB_ReactorHerds_SummaryPivot.csv", show_col_types = FALSE)
+AnnualHP <- read_csv("data/TB_annualHP_Pivot.csv", show_col_types = FALSE)
+AnnualAP <- read_csv("data/TB_annualAP_Pivot.csv", show_col_types = FALSE)
+TBCultPos <- read_csv("data/TB_percTBCult_Pivot.csv", show_col_types = FALSE)
+RollReactors <- read_csv("data/TB_rollingReactor_Pivot.csv", show_col_types = FALSE)
 RollReactors$Date <- as.Date(RollReactors$Date)
 
 refreshDatetime <- format(file.info("data/TB_percTBCult_Pivot.csv")$mtime, "%Y-%m-%d %H:%M")
@@ -184,7 +184,7 @@ make_pivot_table <- function(piv_data) {
 
 # Coloured Datatable formatting
 render_coloured_datatable <- function(piv_data, exclude_cols = "Statistic", page_len = 25) {
-  piv_data <- piv_data %>% mutate(across(where(is.numeric), round, digits=2))
+  piv_data <- piv_data %>% mutate(across(where(is.numeric), ~ round(., digits=2)))
   color_info <- get_color_breaks_and_palette(piv_data, exclude_cols)
   datatable(piv_data, options = list(pageLength = page_len, dom='t', ordering=FALSE), rownames=FALSE) %>%
     formatStyle(names(piv_data), backgroundColor = styleInterval(color_info$breaks, color_info$colors))
@@ -454,7 +454,15 @@ server <- function(input, output, session) {
         "% Change: ", round(map_data$pct_change, 1), "%"
       ),
       hoverinfo = "text",
-      colorscale = "Viridis",
+      #colorscale = "Viridis",
+      colorscale = list(
+        c(0, "#f7e225"),
+        c(0.33, "#fb9b06"),
+        c(0.67, "#ed6925"),
+        c(1, "#cf4446")
+      ),
+      zmin=min(map_data$abs_change),
+      zmax=max(map_data$abs_change),
       colorbar = list(title = "Count (+/-)"),
       marker = list(line = list(width = 0.5, color = "black"))
       ) %>%
@@ -500,7 +508,15 @@ server <- function(input, output, session) {
         "% Change: ", round(map_data$pct_change, 1), "%"
       ),
       hoverinfo = "text",
-      colorscale = "Viridis",
+      #colorscale = "Viridis",
+      colorscale = list(
+        c(0, "#f7e225"),
+        c(0.33, "#fb9b06"),
+        c(0.67, "#ed6925"),
+        c(1, "#cf4446")
+      ),
+      zmin=min(map_data$abs_change),
+      zmax=max(map_data$abs_change),
       colorbar = list(title = "Count (+/-)"),
       marker = list(line = list(width = 0.5, color = "black"))
     ) %>%
